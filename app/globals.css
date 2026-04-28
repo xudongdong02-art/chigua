@@ -2,26 +2,274 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply font-body text-text bg-bg antialiased;
+    font-feature-settings: 'kern' 1, 'liga' 1;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-text;
+  }
+  a { @apply transition-colors duration-200; }
+  button { @apply transition-all duration-200 cursor-pointer; }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ─── Design Tokens ────────────────────────────────── */
+:root {
+  --bg:         #FAFAF8;
+  --surface:    #FFFFFF;
+  --surface-2:  #F5F3F0;
+  --accent:     #FF4757;
+  --accent-2:   #FF7B54;
+  --accent-bg:  #FFF0F0;
+  --text:       #1C1C1E;
+  --text-2:     #6B6B70;
+  --text-mut:   #AEAEB2;
+  --border:     #E8E5E0;
+  --border-2:   #F0EDE8;
+  --tag:        #FFECEC;
+  --tag-text:   #D63031;
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:   0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg:   0 12px 40px rgba(0,0,0,0.10);
+  --shadow-accent: 0 4px 20px rgba(255,71,87,0.25);
+}
+
+@layer components {
+  .auth-input {
+    @apply w-full px-4 py-3.5 rounded-xl text-sm outline-none transition-all duration-200;
+    font-family: var(--font-nunito-sans);
+    background: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--border);
+  }
+  .auth-input::placeholder {
+    color: var(--text-mut);
+  }
+  .auth-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255,71,87,0.1);
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  /* ─── Layout ─────────────────────────────────────── */
+  .container-d {
+    @apply px-6 mx-auto max-w-6xl;
+  }
+
+  /* ─── Entrance animations ───────────────────────── */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  .fade-up.visible {
+    animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .fade-up.visible:nth-child(1) { animation-delay: 0ms; }
+  .fade-up.visible:nth-child(2) { animation-delay: 70ms; }
+  .fade-up.visible:nth-child(3) { animation-delay: 140ms; }
+  .fade-up.visible:nth-child(4) { animation-delay: 210ms; }
+  .fade-up.visible:nth-child(5) { animation-delay: 280ms; }
+  .fade-up.visible:nth-child(6) { animation-delay: 350ms; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── Navbar ────────────────────────────────────── */
+  .navbar {
+    @apply fixed top-0 left-0 right-0 z-50 transition-all duration-300;
+    background: rgba(250, 250, 248, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid transparent;
+  }
+  .navbar.scrolled {
+    background: rgba(250, 250, 248, 0.96);
+    border-bottom-color: var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ─── Event Card ─────────────────────────────────── */
+  .card-event {
+    @apply relative overflow-hidden rounded-2xl transition-all duration-300;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-event:hover {
+    transform: translateY(-4px);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg), var(--shadow-accent);
+  }
+  .card-event:hover .card-img {
+    transform: scale(1.04);
+  }
+
+  /* ─── Buttons ────────────────────────────────────── */
+  .btn-accent {
+    @apply inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-body font-semibold text-sm transition-all duration-200;
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-accent:hover {
+    background: #E8394A;
+    box-shadow: var(--shadow-accent);
+    transform: translateY(-1px);
+  }
+  .btn-outline {
+    @apply inline-flex items-center gap-2 px-6 py-2.5 rounded-full font-body font-semibold text-sm transition-all duration-200;
+    border: 1.5px solid var(--border);
+    color: var(--text);
+  }
+  .btn-outline:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-body transition-all duration-200;
+    color: var(--text-2);
+  }
+  .btn-ghost:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  /* ─── Tag / Badge ───────────────────────────────── */
+  .tag {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium;
+    background: var(--tag);
+    color: var(--tag-text);
+  }
+  .tag-orange {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium;
+    background: #FFF3ED;
+    color: #C75B00;
+  }
+  .tag-blue {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium;
+    background: #EEF4FF;
+    color: #2563EB;
+  }
+  .tag-green {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono font-medium;
+    background: #EDFAF3;
+    color: #16A34A;
+  }
+
+  /* ─── Section divider ────────────────────────────── */
+  .section-label {
+    @apply text-xs font-mono font-medium tracking-[0.18em] uppercase;
+    color: var(--text-mut);
+  }
+  .accent-line {
+    @apply w-8 h-0.5 rounded-full;
+    background: var(--accent);
+  }
+
+  /* ─── Hero gradient (light) ─────────────────────── */
+  .hero-gradient {
+    background: var(--bg);
+  }
+
+  /* ─── Input ─────────────────────────────────────── */
+  .input-d {
+    @apply w-full px-4 py-3 rounded-2xl text-sm font-body transition-all duration-200;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--text);
+    outline: none;
+  }
+  .input-d::placeholder { color: var(--text-mut); }
+  .input-d:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255,71,87,0.1);
+  }
+
+  /* ─── Tab switcher ──────────────────────────────── */
+  .tab-track {
+    @apply relative flex gap-1 p-1 rounded-2xl;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+  }
+  .tab-indicator {
+    @apply absolute top-1 bottom-1 rounded-xl transition-all duration-300;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .tab-item {
+    @apply relative z-10 px-5 py-2 rounded-xl text-sm font-body font-medium transition-colors duration-200;
+    color: var(--text-2);
+  }
+  .tab-item.active {
+    color: var(--text);
+  }
+  .tab-item:hover:not(.active) {
+    color: var(--text);
+  }
+
+  /* ─── Video player ──────────────────────────────── */
+  .video-wrapper {
+    @apply relative overflow-hidden rounded-2xl;
+    background: #000;
+  }
+
+  /* ─── Timeline ──────────────────────────────────── */
+  .timeline-dot {
+    @apply absolute left-0 top-1.5 w-3 h-3 rounded-full;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-bg);
+  }
+  .timeline-line {
+    @apply absolute left-[5px] top-5 bottom-0 w-0.5 rounded-full;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+  }
+
+  /* ─── Scrollbar ─────────────────────────────────── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-mut); }
+
+  /* ─── Document card ─────────────────────────────── */
+  .doc-card {
+    @apply flex items-start gap-4 p-5 rounded-2xl border transition-all duration-200;
+    background: var(--surface);
+    border-color: var(--border);
+  }
+  .doc-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  /* ─── Share button ──────────────────────────────── */
+  .btn-share {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all duration-200;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid rgba(255,71,87,0.15);
+  }
+  .btn-share:hover {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: var(--shadow-accent);
+  }
+
+  /* ─── Page section ──────────────────────────────── */
+  .page-section {
+    @apply py-16;
+  }
+  .page-section-sm {
+    @apply py-10;
   }
 }
