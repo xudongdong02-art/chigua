@@ -255,7 +255,7 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <Navbar />
-      <main className="container-d" style={{ paddingBottom: '80px' }}>
+      <main className="container-d" style={{ paddingTop: '80px', paddingBottom: '120px' }}>
         <div className="max-w-2xl mx-auto py-12">
           <div className="mb-8">
             <h1 className="text-4xl font-display mb-2" style={{ color: 'var(--text)', fontFamily: 'var(--font-dm-serif)' }}>
