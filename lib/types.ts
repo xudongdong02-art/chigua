@@ -29,6 +29,8 @@ export interface DocumentItem {
   size: string | null
   description: string | null
   file_url: string
+  content_text?: string | null
+  thumbnail?: string | null
 }
 
 export interface TimelineItem {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@/lib/auth'
 import Navbar from '@/components/chigua/Navbar'
 import ContentTabs from '@/components/chigua/ContentTabs'
 import VideoPlayer from '@/components/chigua/VideoPlayer'
@@ -27,6 +28,7 @@ const TAG_COLORS: Record<string, string> = {
 export default function EventDetailPage() {
   const params = useParams()
   const id = params.id as string
+  const { user } = useAuth()
 
   const [event, setEvent] = useState<Record<string, unknown> | null>(null)
   const [videos, setVideos] = useState<VideoItem[]>([])
@@ -57,10 +59,10 @@ export default function EventDetailPage() {
         .eq('id', id)
         .single()
 
-      // Fetch related content
+      // Fetch related content（只显示已审核的）
       const [videosRes, docsRes, timelineRes, allEventsRes] = await Promise.all([
-        supabase.from('event_videos').select('*').eq('event_id', id).order('sort_order'),
-        supabase.from('event_documents').select('*').eq('event_id', id).order('sort_order'),
+        supabase.from('event_videos').select('*').eq('event_id', id).eq('status', 'approved').order('sort_order'),
+        supabase.from('event_documents').select('*').eq('event_id', id).eq('status', 'approved').order('sort_order'),
         supabase.from('event_timelines').select('*').eq('event_id', id).order('sort_order'),
         supabase.from('events').select('id, title, cover_image, heat, tag').eq('status', 'published').order('heat', { ascending: false }),
       ])
@@ -145,9 +147,12 @@ export default function EventDetailPage() {
   const formattedDocs = documents.map((d) => ({
     id: d.id,
     title: d.title,
-    type: d.doc_type as 'PDF' | 'Word' | 'Excel' | '截图',
+    type: d.doc_type as 'PDF' | 'Word' | 'Excel' | '截图' | '文字',
     size: d.size ?? '',
     description: d.description ?? '',
+    contentText: d.content_text ?? '',
+    fileUrl: d.file_url ?? '',
+    thumbnail: d.thumbnail ?? '',
   }))
 
   // Format data for Timeline (camelCase)
@@ -292,6 +297,45 @@ export default function EventDetailPage() {
                 返回事件列表
               </Link>
             </div>
+
+            {/* Add Content CTA */}
+            {user ? (
+              <div className="fade-up">
+                <Link
+                  href="/upload"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl text-sm font-semibold transition-all"
+                  style={{
+                    background: 'var(--accent)',
+                    color: '#fff',
+                    fontFamily: 'var(--font-nunito-sans)',
+                    boxShadow: 'var(--shadow-accent)',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                  </svg>
+                  为此事件添加内容
+                </Link>
+              </div>
+            ) : (
+              <div className="fade-up">
+                <Link
+                  href="/auth/register"
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl text-sm font-semibold transition-all"
+                  style={{
+                    background: 'var(--accent-bg)',
+                    color: 'var(--accent)',
+                    border: '1px solid rgba(230,48,48,0.2)',
+                    fontFamily: 'var(--font-nunito-sans)',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                  </svg>
+                  登录后添加内容
+                </Link>
+              </div>
+            )}
 
             {/* Related Events */}
             {relatedEvents.length > 0 && (
