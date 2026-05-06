@@ -9,9 +9,11 @@
   body {
     @apply font-body text-text bg-bg antialiased;
     font-feature-settings: 'kern' 1, 'liga' 1;
+    font-family: 'Nunito Sans', system-ui, sans-serif;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display text-text;
+    @apply text-text;
+    font-family: 'DM Serif Display', 'Noto Serif SC', serif;
   }
   a { @apply transition-colors duration-200; }
   button { @apply transition-all duration-200 cursor-pointer; }
