@@ -60,15 +60,15 @@ export default function Navbar() {
         {/* Actions */}
         <div className="flex items-center gap-2">
           {!loading && (
-            user ? (
-              <>
-                <Link
-                  href="/upload"
-                  className="btn-accent text-sm"
-                  style={{ fontFamily: 'var(--font-nunito-sans)' }}
-                >
-                  上传内容
-                </Link>
+            <>
+              <Link
+                href={user ? "/upload" : "/auth/login?redirect=/upload"}
+                className="btn-accent text-sm text-center"
+                style={{ fontFamily: 'var(--font-nunito-sans)', minWidth: 64 }}
+              >
+                发布
+              </Link>
+              {user ? (
                 <div className="relative">
                   <button
                     onClick={() => setMenuOpen(!menuOpen)}
@@ -116,25 +116,25 @@ export default function Navbar() {
                     </div>
                   )}
                 </div>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/auth/login"
-                  className="btn-ghost text-sm"
-                  style={{ fontFamily: 'var(--font-nunito-sans)' }}
-                >
-                  登录
-                </Link>
-                <Link
-                  href="/auth/register"
-                  className="btn-accent text-sm"
-                  style={{ fontFamily: 'var(--font-nunito-sans)' }}
-                >
-                  免费注册
-                </Link>
-              </>
-            )
+              ) : (
+                <>
+                  <Link
+                    href="/auth/login"
+                    className="btn-ghost text-sm"
+                    style={{ fontFamily: 'var(--font-nunito-sans)' }}
+                  >
+                    登录
+                  </Link>
+                  <Link
+                    href="/auth/register"
+                    className="btn-accent text-sm"
+                    style={{ fontFamily: 'var(--font-nunito-sans)' }}
+                  >
+                    免费注册
+                  </Link>
+                </>
+              )}
+            </>
           )}
         </div>
       </div>

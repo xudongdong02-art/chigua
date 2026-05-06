@@ -18,9 +18,18 @@ type Event = {
   summary: string | null
 }
 
+const TAGS = ['全部', '娱乐', '科技', '财经', '社会', '国际']
+const SORTS = [
+  { key: 'heat',    label: '最热' },
+  { key: 'latest',  label: '最新' },
+  { key: 'synth',   label: '综合' },
+]
+
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTag, setActiveTag] = useState('全部')
+  const [activeSort, setActiveSort] = useState('heat')
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -37,36 +46,46 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchEvents() {
-      const { data, error } = await supabase
+      setLoading(true)
+      let query = supabase
         .from('events')
         .select('id, title, subtitle, cover_image, heat, tag, publish_date, read_time, summary')
         .eq('status', 'published')
-        .order('heat', { ascending: false })
 
+      if (activeTag !== '全部') {
+        query = query.eq('tag', activeTag)
+      }
+
+      if (activeSort === 'heat') {
+        query = query.order('heat', { ascending: false })
+      } else if (activeSort === 'latest') {
+        query = query.order('publish_date', { ascending: false })
+      } else {
+        // 综合：按 heat 降序，publish_date 降序
+        query = query.order('heat', { ascending: false })
+      }
+
+      const { data, error } = await query
       if (!error && data) {
-        setEvents(data)
+        // 综合排序：结合 heat 和时间
+        if (activeSort === 'synth') {
+          const sorted = [...data].sort((a, b) => {
+            const scoreA = a.heat * 0.7 + new Date(a.publish_date).getTime() * 0.0000001
+            const scoreB = b.heat * 0.7 + new Date(b.publish_date).getTime() * 0.0000001
+            return scoreB - scoreA
+          })
+          setEvents(sorted)
+        } else {
+          setEvents(data)
+        }
       }
       setLoading(false)
     }
     fetchEvents()
-  }, [])
+  }, [activeTag, activeSort])
 
   const featured = events.reduce((a, b) => (a.heat > b.heat ? a : b), events[0])
   const rest = events.filter((e) => e.id !== featured?.id)
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <div className="text-center">
-          <div
-            className="w-10 h-10 rounded-full border-2 border-t-transparent mx-auto mb-4 animate-spin"
-            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-          />
-          <p className="text-sm font-mono" style={{ color: 'var(--text-mut)' }}>加载中...</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -129,30 +148,60 @@ export default function Home() {
         <section className="page-section-sm">
           <div className="container-d">
             {/* Section Header */}
-            <div className="flex items-center justify-between mb-8 fade-up">
-              <div className="flex items-center gap-3">
-                <div className="accent-line" />
-                <span className="section-label">更多热点</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {['全部', '娱乐', '科技', '财经', '社会', '国际'].map((filter, i) => (
+            <div className="flex flex-col gap-4 mb-8 fade-up">
+              {/* 分类标签 */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {TAGS.map((tag) => (
                   <button
-                    key={filter}
+                    key={tag}
+                    onClick={() => setActiveTag(tag)}
                     className="px-3.5 py-1.5 rounded-full text-xs font-mono font-medium transition-all duration-200"
                     style={{
                       fontFamily: 'var(--font-jetbrains)',
-                      background: i === 0 ? 'var(--accent)' : 'transparent',
-                      color: i === 0 ? '#fff' : 'var(--text-2)',
+                      background: activeTag === tag ? 'var(--accent)' : 'var(--surface)',
+                      color: activeTag === tag ? '#fff' : 'var(--text-2)',
+                      border: activeTag === tag ? 'none' : '1.5px solid var(--border)',
                     }}
                   >
-                    {filter}
+                    {tag}
                   </button>
                 ))}
+              </div>
+              {/* 排序 */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: 'var(--text-mut)', fontFamily: 'var(--font-jetbrains)' }}>排序：</span>
+                {SORTS.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => setActiveSort(s.key)}
+                    className="text-xs px-3 py-1 rounded-full transition-all"
+                    style={{
+                      fontFamily: 'var(--font-nunito-sans)',
+                      background: activeSort === s.key ? 'var(--accent-bg)' : 'transparent',
+                      color: activeSort === s.key ? 'var(--accent)' : 'var(--text-mut)',
+                      border: activeSort === s.key ? '1px solid rgba(255,71,87,0.2)' : '1px solid transparent',
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+                {activeTag !== '全部' && (
+                  <span className="ml-auto text-xs font-mono" style={{ color: 'var(--text-mut)' }}>
+                    {loading ? '加载中...' : `${events.length} 个事件`}
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Grid */}
-            {rest.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <div
+                  className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+                  style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                />
+              </div>
+            ) : rest.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {rest.map((event, i) => (
                   <EventCard key={event.id} event={event} index={i} />
@@ -161,24 +210,26 @@ export default function Home() {
             ) : (
               <div className="text-center py-16">
                 <p className="text-sm font-mono" style={{ color: 'var(--text-mut)' }}>
-                  暂无更多事件
+                  暂无{activeTag === '全部' ? '' : activeTag}相关事件
                 </p>
               </div>
             )}
 
             {/* Load More */}
-            <div className="flex justify-center mt-12 fade-up">
-              <button
-                className="px-8 py-3 rounded-full text-sm font-semibold transition-all duration-200"
-                style={{
-                  border: '1.5px solid var(--border)',
-                  color: 'var(--text-2)',
-                  fontFamily: 'var(--font-nunito-sans)',
-                }}
-              >
-                加载更多
-              </button>
-            </div>
+            {!loading && rest.length > 0 && (
+              <div className="flex justify-center mt-12 fade-up">
+                <button
+                  className="px-8 py-3 rounded-full text-sm font-semibold transition-all duration-200"
+                  style={{
+                    border: '1.5px solid var(--border)',
+                    color: 'var(--text-2)',
+                    fontFamily: 'var(--font-nunito-sans)',
+                  }}
+                >
+                  加载更多
+                </button>
+              </div>
+            )}
           </div>
         </section>
 

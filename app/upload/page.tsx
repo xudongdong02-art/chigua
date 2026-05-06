@@ -12,7 +12,14 @@ type Event = {
   tag: string
 }
 
-type ContentType = 'video' | 'document' | 'text' | 'image'
+type ContentType = 'video' | 'document' | 'image' | 'text'
+
+const CONTENT_OPTIONS: Array<{ key: ContentType; label: string; icon: string }> = [
+  { key: 'video',    label: '视频',   icon: '📹' },
+  { key: 'document', label: '文档',   icon: '📄' },
+  { key: 'image',    label: '图片',   icon: '🖼' },
+  { key: 'text',     label: '文字',   icon: '✏️' },
+]
 
 export default function UploadPage() {
   const { user, loading } = useAuth()
@@ -21,7 +28,7 @@ export default function UploadPage() {
 
   const [events, setEvents] = useState<Event[]>([])
   const [selectedEvent, setSelectedEvent] = useState('')
-  const [contentType, setContentType] = useState<ContentType>('video')
+  const [selectedTypes, setSelectedTypes] = useState<Set<ContentType>>(new Set())
   const [file, setFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -35,7 +42,8 @@ export default function UploadPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/auth/login')
+      // 重定向到登录页，登录后跳转回来
+      router.push('/auth/login?redirect=/upload')
     }
   }, [user, loading, router])
 
@@ -50,6 +58,19 @@ export default function UploadPage() {
     }
     if (user) fetchEvents()
   }, [user])
+
+  const toggleType = (type: ContentType) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev)
+      if (next.has(type)) {
+        next.delete(type)
+      } else {
+        next.add(type)
+      }
+      return next
+    })
+    setFile(null)
+  }
 
   // 拖拽上传
   const handleDrop = (e: React.DragEvent) => {
@@ -73,12 +94,8 @@ export default function UploadPage() {
       setError('请填写完整信息')
       return
     }
-    if ((contentType === 'video' || contentType === 'document' || contentType === 'image') && !file) {
-      setError('请选择文件')
-      return
-    }
-    if (contentType === 'text' && !textContent.trim()) {
-      setError('请输入文字内容')
+    if (selectedTypes.size === 0) {
+      setError('请至少选择一种内容类型')
       return
     }
 
@@ -87,89 +104,99 @@ export default function UploadPage() {
     setProgress(5)
 
     try {
-      let fileUrl = ''
-      let thumbnail = ''
-      let docType = ''
+      // 循环每种选中的类型，逐一插入
+      for (const type of Array.from(selectedTypes)) {
+        let fileUrl = ''
+        let thumbnail = ''
+        let docType = ''
+        let contentText = ''
 
-      if (file) {
-        const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-        const filename = `${selectedEvent}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        if (type === 'text') {
+          contentText = textContent
+        } else if (!file) {
+          setError('请选择文件')
+          setUploading(false)
+          return
+        } else if (file) {
+          const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+          const filename = `${selectedEvent}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-        const { error: storageError } = await supabase.storage
-          .from('gua')
-          .upload(filename, file, { cacheControl: '3600', upsert: false })
+          const { error: storageError } = await supabase.storage
+            .from('gua')
+            .upload(filename, file, { cacheControl: '3600', upsert: false })
 
-        if (storageError) throw new Error(`上传失败: ${storageError.message}`)
-        setProgress(40)
+          if (storageError) throw new Error(`上传失败: ${storageError.message}`)
+          setProgress(40)
 
-        const { data: urlData } = supabase.storage.from('gua').getPublicUrl(filename)
-        fileUrl = urlData.publicUrl
+          const { data: urlData } = supabase.storage.from('gua').getPublicUrl(filename)
+          fileUrl = urlData.publicUrl
 
-        if (contentType === 'image') thumbnail = fileUrl
-        if (contentType === 'document') {
-          docType = ext === 'pdf' ? 'PDF'
-            : ['doc', 'docx'].includes(ext) ? 'Word'
-            : ['xls', 'xlsx'].includes(ext) ? 'Excel'
-            : '截图'
+          if (type === 'image') thumbnail = fileUrl
+          if (type === 'document') {
+            docType = ext === 'pdf' ? 'PDF'
+              : ['doc', 'docx'].includes(ext) ? 'Word'
+              : ['xls', 'xlsx'].includes(ext) ? 'Excel'
+              : '截图'
+          }
         }
-      }
 
-      setProgress(60)
+        setProgress(60)
 
-      if (contentType === 'text') {
-        const { error: dbError } = await supabase.from('event_documents').insert({
-          event_id: selectedEvent,
-          title,
-          doc_type: '文字',
-          description: description || null,
-          content_text: textContent,
-          file_url: '',
-          size: `${textContent.length} 字`,
-          status: 'pending',
-          created_by: user!.id,
-          sort_order: 0,
-        })
-        if (dbError) throw new Error(`保存失败: ${dbError.message}`)
-      } else if (contentType === 'video') {
-        const { error: dbError } = await supabase.from('event_videos').insert({
-          event_id: selectedEvent,
-          title,
-          description: description || null,
-          duration: duration || null,
-          video_url: fileUrl,
-          thumbnail: thumbnail || null,
-          status: 'pending',
-          created_by: user!.id,
-          sort_order: 0,
-        })
-        if (dbError) throw new Error(`保存失败: ${dbError.message}`)
-      } else if (contentType === 'image') {
-        const { error: dbError } = await supabase.from('event_documents').insert({
-          event_id: selectedEvent,
-          title,
-          doc_type: '截图',
-          description: description || null,
-          file_url: fileUrl,
-          size: file ? formatSize(file.size) : '',
-          thumbnail: thumbnail || null,
-          status: 'pending',
-          created_by: user!.id,
-          sort_order: 0,
-        })
-        if (dbError) throw new Error(`保存失败: ${dbError.message}`)
-      } else {
-        const { error: dbError } = await supabase.from('event_documents').insert({
-          event_id: selectedEvent,
-          title,
-          doc_type: docType,
-          description: description || null,
-          file_url: fileUrl,
-          size: file ? formatSize(file.size) : '',
-          status: 'pending',
-          created_by: user!.id,
-          sort_order: 0,
-        })
-        if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+        if (type === 'text') {
+          const { error: dbError } = await supabase.from('event_documents').insert({
+            event_id: selectedEvent,
+            title,
+            doc_type: '文字',
+            description: description || null,
+            content_text: contentText,
+            file_url: '',
+            size: `${contentText.length} 字`,
+            status: 'pending',
+            created_by: user!.id,
+            sort_order: 0,
+          })
+          if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+        } else if (type === 'video') {
+          const { error: dbError } = await supabase.from('event_videos').insert({
+            event_id: selectedEvent,
+            title,
+            description: description || null,
+            duration: duration || null,
+            video_url: fileUrl,
+            thumbnail: thumbnail || null,
+            status: 'pending',
+            created_by: user!.id,
+            sort_order: 0,
+          })
+          if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+        } else if (type === 'image') {
+          const { error: dbError } = await supabase.from('event_documents').insert({
+            event_id: selectedEvent,
+            title,
+            doc_type: '截图',
+            description: description || null,
+            file_url: fileUrl,
+            size: file ? formatSize(file.size) : '',
+            thumbnail: thumbnail || null,
+            status: 'pending',
+            created_by: user!.id,
+            sort_order: 0,
+          })
+          if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+        } else {
+          const { error: dbError } = await supabase.from('event_documents').insert({
+            event_id: selectedEvent,
+            title,
+            doc_type: docType,
+            description: description || null,
+            file_url: fileUrl,
+            size: file ? formatSize(file.size) : '',
+            status: 'pending',
+            created_by: user!.id,
+            sort_order: 0,
+          })
+          if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+        }
       }
 
       setProgress(100)
@@ -243,7 +270,7 @@ export default function UploadPage() {
               内容已提交，将在审核后展示，感谢你的贡献
             </p>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => { setSuccess(false); setFile(null); setTitle(''); setDescription(''); setTextContent('') }} className="btn-outline px-6 py-2.5">继续上传</button>
+              <button onClick={() => { setSuccess(false); setFile(null); setTitle(''); setDescription(''); setTextContent(''); setSelectedTypes(new Set()) }} className="btn-outline px-6 py-2.5">继续上传</button>
               <Link href="/" className="btn-accent px-6 py-2.5">返回首页</Link>
             </div>
           </div>
@@ -251,6 +278,10 @@ export default function UploadPage() {
       </div>
     )
   }
+
+  // 当前选中的单选类型（用于显示对应的表单）
+  const currentType = selectedTypes.size === 1 ? Array.from(selectedTypes)[0] : null
+  const needsFile = currentType !== null && currentType !== 'text'
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -268,34 +299,38 @@ export default function UploadPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
 
-            {/* 内容类型 */}
+            {/* 内容类型（多选） */}
             <div>
               <label className="block text-sm mb-3" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
-                内容类型
+                内容类型 <span style={{ color: 'var(--accent)' }}>*</span>
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {([
-                  { key: 'video',    label: '📹 视频' },
-                  { key: 'document', label: '📄 文档' },
-                  { key: 'image',    label: '🖼 图片' },
-                  { key: 'text',      label: '✏️ 文字' },
-                ] as const).map(({ key, label }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => { setContentType(key); setFile(null) }}
-                    className="px-3 py-3 rounded-2xl text-sm font-medium transition-all text-center"
-                    style={{
-                      background: contentType === key ? 'var(--accent)' : 'var(--surface)',
-                      color: contentType === key ? '#fff' : 'var(--text-2)',
-                      border: contentType === key ? 'none' : '1.5px solid var(--border)',
-                      fontFamily: 'var(--font-nunito-sans)',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
+                {CONTENT_OPTIONS.map(({ key, label, icon }) => {
+                  const active = selectedTypes.has(key)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleType(key)}
+                      className="px-3 py-3 rounded-2xl text-sm font-medium transition-all text-center flex flex-col items-center gap-1"
+                      style={{
+                        background: active ? 'var(--accent)' : 'var(--surface)',
+                        color: active ? '#fff' : 'var(--text-2)',
+                        border: active ? 'none' : '1.5px solid var(--border)',
+                        fontFamily: 'var(--font-nunito-sans)',
+                      }}
+                    >
+                      <span>{icon}</span>
+                      <span>{label}</span>
+                    </button>
+                  )
+                })}
               </div>
+              {selectedTypes.size > 1 && (
+                <p className="text-xs mt-2" style={{ color: 'var(--text-mut)' }}>
+                  已选择 {selectedTypes.size} 种类型，将分别提交 {selectedTypes.size} 条内容
+                </p>
+              )}
             </div>
 
             {/* 关联事件 */}
@@ -320,7 +355,7 @@ export default function UploadPage() {
             </div>
 
             {/* 视频专属：时长 */}
-            {contentType === 'video' && (
+            {currentType === 'video' && (
               <div>
                 <label className="block text-sm mb-2" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
                   时长
@@ -330,7 +365,7 @@ export default function UploadPage() {
             )}
 
             {/* 文字内容 */}
-            {contentType === 'text' && (
+            {(currentType === 'text' || selectedTypes.has('text')) && (
               <div>
                 <label className="block text-sm mb-2" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
                   文字内容 <span style={{ color: 'var(--accent)' }}>*</span>
@@ -340,7 +375,7 @@ export default function UploadPage() {
                   onChange={(e) => setTextContent(e.target.value)}
                   placeholder="输入文字内容..."
                   rows={6}
-                  required
+                  required={selectedTypes.has('text')}
                   className="auth-input resize-none"
                   style={{ fontFamily: 'var(--font-nunito-sans)' }}
                 />
@@ -351,7 +386,7 @@ export default function UploadPage() {
             )}
 
             {/* 文件选择（视频/文档/图片） */}
-            {contentType !== 'text' && (
+            {needsFile && (
               <div>
                 <label className="block text-sm mb-2" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
                   选择文件 <span style={{ color: 'var(--accent)' }}>*</span>
@@ -360,8 +395,8 @@ export default function UploadPage() {
                   ref={fileRef}
                   type="file"
                   accept={
-                    contentType === 'video' ? 'video/*'
-                    : contentType === 'image' ? 'image/*'
+                    currentType === 'video' ? 'video/*'
+                    : currentType === 'image' ? 'image/*'
                     : '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp'
                   }
                   onChange={handleFileChange}
@@ -395,9 +430,9 @@ export default function UploadPage() {
                         {dragging ? '松开以上传' : '点击选择文件，或拖拽文件到此处'}
                       </p>
                       <p className="text-xs mt-1" style={{ color: 'var(--text-mut)' }}>
-                        {contentType === 'video' && '支持 MP4、MOV、AVI 等'}
-                        {contentType === 'image' && '支持 PNG、JPG、GIF、WebP'}
-                        {contentType === 'document' && '支持 PDF、Word、Excel、图片'}
+                        {currentType === 'video' && '支持 MP4、MOV、AVI 等'}
+                        {currentType === 'image' && '支持 PNG、JPG、GIF、WebP'}
+                        {currentType === 'document' && '支持 PDF、Word、Excel、图片'}
                       </p>
                     </div>
                   )}
@@ -445,10 +480,10 @@ export default function UploadPage() {
             {/* 提交 */}
             <button
               type="submit"
-              disabled={uploading || !selectedEvent || !title || (contentType !== 'text' && !file)}
+              disabled={uploading || !selectedEvent || !title || selectedTypes.size === 0 || (needsFile ? !file : false)}
               className="btn-accent w-full py-3.5 text-sm disabled:opacity-40"
             >
-              {uploading ? '提交中...' : '提交审核'}
+              {uploading ? '提交中...' : `提交审核${selectedTypes.size > 1 ? ` (${selectedTypes.size}条)` : ''}`}
             </button>
           </form>
         </div>

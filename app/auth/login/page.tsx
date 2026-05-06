@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 
 export default function LoginPage() {
@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const { signIn } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect = searchParams.get('redirect') ?? '/'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +27,7 @@ export default function LoginPage() {
     if (error) {
       setError(error)
     } else {
-      router.push('/')
+      router.push(redirect)
     }
   }
 
