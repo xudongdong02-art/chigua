@@ -11,3 +11,10 @@ dist/
 .idea/
 .vscode/
 *.swp
+
+# Vercel
+.vercel.env
+.vercel/
+
+# TypeScript build cache
+*.tsbuildinfo
