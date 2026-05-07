@@ -161,7 +161,6 @@ export default function CommentSection({ eventId }: Props) {
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [postingTo, setPostingTo] = useState<string | null>(null)
 
   const fetchComments = async () => {
     const { data } = await supabase
@@ -204,14 +203,12 @@ export default function CommentSection({ eventId }: Props) {
 
   const handleReply = async (parentId: string, content: string) => {
     if (!user) return
-    setPostingTo(parentId)
     await supabase.from('event_comments').insert({
       event_id: eventId,
       user_id: user.id,
       content,
       parent_id: parentId,
     })
-    setPostingTo(null)
     fetchComments()
   }
 

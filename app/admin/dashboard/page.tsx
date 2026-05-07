@@ -23,17 +23,13 @@ export default function AdminDashboardPage() {
       setLoading(true)
 
       // Count stats in parallel
-      const [eventsRes, videosRes, docsRes, usersRes, pendingRes] = await Promise.all([
+      const [eventsRes, totalVideos, totalDocs, totalUsers, pendingRes] = await Promise.all([
         supabase.from('events').select('id', { count: 'exact', head: true }).eq('status', 'published'),
         supabase.from('event_videos').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
         supabase.from('event_documents').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('event_videos').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       ])
-
-      const totalVideos = await supabase.from('event_videos').select('id', { count: 'exact', head: true }).eq('status', 'approved')
-      const totalDocs = await supabase.from('event_documents').select('id', { count: 'exact', head: true }).eq('status', 'approved')
-      const totalUsers = await supabase.from('profiles').select('id', { count: 'exact', head: true })
 
       setStats([
         {

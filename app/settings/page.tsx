@@ -17,7 +17,6 @@ type Profile = {
 export default function SettingsPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
-  const [profile, setProfile] = useState<Profile | null>(null)
   const [fetching, setFetching] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -42,7 +41,6 @@ export default function SettingsPage() {
       const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       if (data) {
         const p = data as unknown as Profile
-        setProfile(p)
         setNickname(p.nickname ?? '')
         setBio(p.bio ?? '')
         setAvatarUrl(p.avatar_url ?? '')
