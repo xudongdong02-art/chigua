@@ -35,12 +35,33 @@ export default function Navbar() {
 
         {/* Nav Links */}
         <div className="hidden md:flex items-center gap-1">
-          {['热点', '娱乐', '科技', '财经', '社会', '国际'].map((item) => (
+          <Link
+            href="/"
+            className="px-4 py-2 rounded-full text-sm font-body font-medium transition-all duration-200"
+            style={{ color: 'var(--text-2)' }}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'var(--surface-2)'
+              el.style.color = 'var(--text)'
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget as HTMLElement
+              el.style.background = 'transparent'
+              el.style.color = 'var(--text-2)'
+            }}
+          >
+            热点
+          </Link>
+          {['娱乐', '科技', '财经', '社会', '国际'].map((tag) => (
             <Link
-              key={item}
-              href="/"
+              key={tag}
+              href={`/#tag-${tag}`}
               className="px-4 py-2 rounded-full text-sm font-body font-medium transition-all duration-200"
               style={{ color: 'var(--text-2)' }}
+              onClick={() => {
+                // Scroll to top and let the home page handle tag filtering
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
               onMouseEnter={(e) => {
                 const el = e.currentTarget as HTMLElement
                 el.style.background = 'var(--surface-2)'
@@ -52,7 +73,7 @@ export default function Navbar() {
                 el.style.color = 'var(--text-2)'
               }}
             >
-              {item}
+              {tag}
             </Link>
           ))}
         </div>
@@ -78,42 +99,84 @@ export default function Navbar() {
                     {user.user_metadata?.username?.[0]?.toUpperCase() ?? user.email?.[0]?.toUpperCase() ?? 'U'}
                   </button>
                   {menuOpen && (
-                    <div
-                      className="absolute right-0 top-12 w-48 rounded-2xl p-2 z-50"
-                      style={{
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        boxShadow: 'var(--shadow-lg)',
-                      }}
-                    >
-                      <div className="px-3 py-2 mb-1">
-                        <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-                          {user.user_metadata?.username ?? '用户'}
-                        </p>
-                        <p className="text-xs truncate" style={{ color: 'var(--text-mut)' }}>
-                          {user.email}
-                        </p>
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setMenuOpen(false)}
+                      />
+                      <div
+                        className="absolute right-0 top-12 w-48 rounded-2xl p-2 z-50"
+                        style={{
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          boxShadow: 'var(--shadow-lg)',
+                        }}
+                      >
+                        <div className="px-3 py-2 mb-1">
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                            {user.user_metadata?.username ?? '用户'}
+                          </p>
+                          <p className="text-xs truncate" style={{ color: 'var(--text-mut)' }}>
+                            {user.email}
+                          </p>
+                        </div>
+                        <div style={{ borderTop: '1px solid var(--border)' }}>
+                          <Link
+                            href="/profile"
+                            className="block w-full text-left px-3 py-2 text-sm rounded-xl transition-colors"
+                            style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}
+                            onMouseEnter={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'var(--surface-2)'
+                              el.style.color = 'var(--accent)'
+                            }}
+                            onMouseLeave={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'transparent'
+                              el.style.color = 'var(--text-2)'
+                            }}
+                            onClick={() => setMenuOpen(false)}
+                          >
+                            我的内容
+                          </Link>
+                          <Link
+                            href="/settings"
+                            className="block w-full text-left px-3 py-2 text-sm rounded-xl transition-colors"
+                            style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}
+                            onMouseEnter={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'var(--surface-2)'
+                              el.style.color = 'var(--accent)'
+                            }}
+                            onMouseLeave={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'transparent'
+                              el.style.color = 'var(--text-2)'
+                            }}
+                            onClick={() => setMenuOpen(false)}
+                          >
+                            个人设置
+                          </Link>
+                          <button
+                            onClick={() => { signOut(); setMenuOpen(false) }}
+                            className="w-full text-left px-3 py-2 text-sm rounded-xl transition-colors"
+                            style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}
+                            onMouseEnter={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'var(--surface-2)'
+                              el.style.color = 'var(--accent)'
+                            }}
+                            onMouseLeave={(e) => {
+                              const el = e.currentTarget as HTMLElement
+                              el.style.background = 'transparent'
+                              el.style.color = 'var(--text-2)'
+                            }}
+                          >
+                            退出登录
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ borderTop: '1px solid var(--border)' }}>
-                        <button
-                          onClick={() => { signOut(); setMenuOpen(false) }}
-                          className="w-full text-left px-3 py-2 text-sm rounded-xl transition-colors"
-                          style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}
-                          onMouseEnter={(e) => {
-                            const el = e.currentTarget as HTMLElement
-                            el.style.background = 'var(--surface-2)'
-                            el.style.color = 'var(--accent)'
-                          }}
-                          onMouseLeave={(e) => {
-                            const el = e.currentTarget as HTMLElement
-                            el.style.background = 'transparent'
-                            el.style.color = 'var(--text-2)'
-                          }}
-                        >
-                          退出登录
-                        </button>
-                      </div>
-                    </div>
+                    </>
                   )}
                 </div>
               ) : (

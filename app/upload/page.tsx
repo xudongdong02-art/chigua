@@ -14,6 +14,12 @@ type Event = {
 
 type ContentType = 'video' | 'document' | 'image' | 'text'
 
+type SubmittedItem = {
+  type: ContentType
+  title: string
+  id?: string
+}
+
 const CONTENT_OPTIONS: Array<{ key: ContentType; label: string; icon: string }> = [
   { key: 'video',    label: '视频',   icon: '📹' },
   { key: 'document', label: '文档',   icon: '📄' },
@@ -25,24 +31,26 @@ export default function UploadPage() {
   const { user, loading } = useAuth()
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
+  const multiFileRef = useRef<HTMLInputElement>(null)
 
   const [events, setEvents] = useState<Event[]>([])
   const [selectedEvent, setSelectedEvent] = useState('')
   const [selectedTypes, setSelectedTypes] = useState<Set<ContentType>>(new Set())
   const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [duration, setDuration] = useState('')
   const [textContent, setTextContent] = useState('')
   const [uploading, setUploading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [submittedItems, setSubmittedItems] = useState<SubmittedItem[]>([])
   const [error, setError] = useState('')
   const [progress, setProgress] = useState(0)
   const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
-      // 重定向到登录页，登录后跳转回来
       router.push('/auth/login?redirect=/upload')
     }
   }, [user, loading, router])
@@ -70,9 +78,10 @@ export default function UploadPage() {
       return next
     })
     setFile(null)
+    setFiles([])
   }
 
-  // 拖拽上传
+  // 拖拽上传（单文件）
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
@@ -85,6 +94,15 @@ export default function UploadPage() {
     if (f) {
       setFile(f)
       if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''))
+    }
+  }
+
+  // 多文件选择（图片）
+  const handleMultiFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fs = Array.from(e.target.files ?? [])
+    if (fs.length) {
+      setFiles(fs)
+      if (!title) setTitle(fs[0].name.replace(/\.[^.]+$/, ''))
     }
   }
 
@@ -103,8 +121,9 @@ export default function UploadPage() {
     setError('')
     setProgress(5)
 
+    const submitted: SubmittedItem[] = []
+
     try {
-      // 循环每种选中的类型，逐一插入
       for (const type of Array.from(selectedTypes)) {
         let fileUrl = ''
         let thumbnail = ''
@@ -113,30 +132,47 @@ export default function UploadPage() {
 
         if (type === 'text') {
           contentText = textContent
+        } else if (type === 'image' && files.length > 0) {
+          // 多图：逐一上传
+          for (let i = 0; i < files.length; i++) {
+            const f = files[i]
+            const ext = f.name.split('.').pop()?.toLowerCase() ?? ''
+            const filename = `${selectedEvent}/${Date.now()}-${i}-${Math.random().toString(36).slice(2)}.${ext}`
+            const { error: storageError } = await supabase.storage.from('gua').upload(filename, f, { cacheControl: '3600', upsert: false })
+            if (storageError) throw new Error(`上传失败: ${storageError.message}`)
+            const { data: urlData } = supabase.storage.from('gua').getPublicUrl(filename)
+            const imgUrl = urlData.publicUrl
+            const { error: dbError } = await supabase.from('event_documents').insert({
+              event_id: selectedEvent,
+              title: i === 0 ? title : `${title} (${i + 1})`,
+              doc_type: '截图',
+              description: description || null,
+              file_url: imgUrl,
+              thumbnail: imgUrl,
+              size: formatSize(f.size),
+              status: 'pending',
+              created_by: user!.id,
+              sort_order: i,
+            })
+            if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+            submitted.push({ type: 'image', title: i === 0 ? title : `${title} (${i + 1})` })
+          }
+          setProgress(60 + Math.round((type === 'image' ? 1 : 0) / selectedTypes.size * 40))
+          continue
         } else if (!file) {
           setError('请选择文件')
           setUploading(false)
           return
-        } else if (file) {
+        } else {
           const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
           const filename = `${selectedEvent}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-
-          const { error: storageError } = await supabase.storage
-            .from('gua')
-            .upload(filename, file, { cacheControl: '3600', upsert: false })
-
+          const { error: storageError } = await supabase.storage.from('gua').upload(filename, file, { cacheControl: '3600', upsert: false })
           if (storageError) throw new Error(`上传失败: ${storageError.message}`)
-          setProgress(40)
-
           const { data: urlData } = supabase.storage.from('gua').getPublicUrl(filename)
           fileUrl = urlData.publicUrl
-
           if (type === 'image') thumbnail = fileUrl
           if (type === 'document') {
-            docType = ext === 'pdf' ? 'PDF'
-              : ['doc', 'docx'].includes(ext) ? 'Word'
-              : ['xls', 'xlsx'].includes(ext) ? 'Excel'
-              : '截图'
+            docType = ext === 'pdf' ? 'PDF' : ['doc', 'docx'].includes(ext) ? 'Word' : ['xls', 'xlsx'].includes(ext) ? 'Excel' : '截图'
           }
         }
 
@@ -156,6 +192,7 @@ export default function UploadPage() {
             sort_order: 0,
           })
           if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+          submitted.push({ type: 'text', title })
         } else if (type === 'video') {
           const { error: dbError } = await supabase.from('event_videos').insert({
             event_id: selectedEvent,
@@ -169,6 +206,7 @@ export default function UploadPage() {
             sort_order: 0,
           })
           if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+          submitted.push({ type: 'video', title })
         } else if (type === 'image') {
           const { error: dbError } = await supabase.from('event_documents').insert({
             event_id: selectedEvent,
@@ -183,6 +221,7 @@ export default function UploadPage() {
             sort_order: 0,
           })
           if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+          submitted.push({ type: 'image', title })
         } else {
           const { error: dbError } = await supabase.from('event_documents').insert({
             event_id: selectedEvent,
@@ -196,10 +235,12 @@ export default function UploadPage() {
             sort_order: 0,
           })
           if (dbError) throw new Error(`保存失败: ${dbError.message}`)
+          submitted.push({ type: 'document', title })
         }
       }
 
       setProgress(100)
+      setSubmittedItems(submitted)
       setSuccess(true)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '上传出错')
@@ -228,10 +269,7 @@ export default function UploadPage() {
         <Navbar />
         <div className="container-d flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
           <div className="text-center max-w-sm">
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
-              style={{ background: 'var(--accent-bg)' }}
-            >
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'var(--accent-bg)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--accent)">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
               </svg>
@@ -253,11 +291,12 @@ export default function UploadPage() {
   }
 
   if (success) {
+    const eventName = events.find(e => e.id === selectedEvent)?.title ?? ''
     return (
       <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
         <Navbar />
         <div className="container-d flex items-center justify-center" style={{ minHeight: 'calc(100vh - 64px)' }}>
-          <div className="text-center max-w-sm">
+          <div className="text-center max-w-md">
             <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.2)' }}>
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2">
                 <polyline points="20 6 9 17 4 12"/>
@@ -266,12 +305,44 @@ export default function UploadPage() {
             <h2 className="text-2xl font-display mb-3" style={{ color: 'var(--text)', fontFamily: 'var(--font-dm-serif)' }}>
               提交成功！
             </h2>
-            <p className="text-sm mb-8" style={{ color: 'var(--text-2)' }}>
-              内容已提交，将在审核后展示，感谢你的贡献
+            <p className="text-sm mb-6" style={{ color: 'var(--text-2)' }}>
+              已提交 {submittedItems.length} 条内容，将在审核后展示
             </p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={() => { setSuccess(false); setFile(null); setTitle(''); setDescription(''); setTextContent(''); setSelectedTypes(new Set()) }} className="btn-outline px-6 py-2.5">继续上传</button>
-              <Link href="/" className="btn-accent px-6 py-2.5">返回首页</Link>
+            {/* 内容摘要 */}
+            <div className="text-left rounded-2xl p-4 mb-8" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              <p className="text-xs mb-2" style={{ color: 'var(--text-mut)', fontFamily: 'var(--font-jetbrains)' }}>已提交内容</p>
+              {submittedItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-2 py-1.5" style={{ borderBottom: i < submittedItems.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <span className="text-xs" style={{ color: 'var(--accent)' }}>
+                    {item.type === 'video' ? '📹' : item.type === 'document' ? '📄' : item.type === 'image' ? '🖼' : '✏️'}
+                  </span>
+                  <span className="text-sm" style={{ color: 'var(--text)', fontFamily: 'var(--font-nunito-sans)' }}>{item.title}</span>
+                </div>
+              ))}
+              {eventName && (
+                <p className="text-xs mt-2" style={{ color: 'var(--text-mut)', fontFamily: 'var(--font-nunito-sans)' }}>
+                  关联事件：{eventName}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button
+                onClick={() => {
+                  setSuccess(false)
+                  setFile(null)
+                  setFiles([])
+                  setTitle('')
+                  setDescription('')
+                  setTextContent('')
+                  setSelectedTypes(new Set())
+                  setSelectedEvent('')
+                }}
+                className="btn-outline px-6 py-2.5"
+              >
+                继续上传
+              </button>
+              <Link href="/profile" className="btn-accent px-6 py-2.5">查看我的内容</Link>
+              <Link href="/" className="btn-ghost px-6 py-2.5">返回首页</Link>
             </div>
           </div>
         </div>
@@ -282,6 +353,7 @@ export default function UploadPage() {
   // 当前选中的单选类型（用于显示对应的表单）
   const currentType = selectedTypes.size === 1 ? Array.from(selectedTypes)[0] : null
   const needsFile = currentType !== null && currentType !== 'text'
+  const needsMultiFile = currentType === 'image' && files.length > 0
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -385,8 +457,72 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* 文件选择（视频/文档/图片） */}
-            {needsFile && (
+            {/* 文件选择：图片（多选） */}
+            {currentType === 'image' && (
+              <div>
+                <label className="block text-sm mb-2" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
+                  选择图片（可多选） <span style={{ color: 'var(--accent)' }}>*</span>
+                </label>
+                <input
+                  ref={multiFileRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleMultiFileChange}
+                  className="hidden"
+                />
+                <div
+                  onClick={() => multiFileRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  className="border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all"
+                  style={{
+                    borderColor: dragging ? 'var(--accent)' : files.length > 0 ? 'var(--accent)' : 'var(--border)',
+                    background: dragging ? 'var(--accent-bg)' : files.length > 0 ? 'var(--accent-bg)' : 'var(--surface)',
+                  }}
+                >
+                  {files.length > 0 ? (
+                    <div>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--accent)" className="mx-auto mb-2">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                      </svg>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>
+                        已选择 {files.length} 张图片
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-mut)' }}>
+                        点击可重新选择
+                      </p>
+                      <div className="flex gap-2 justify-center mt-3 flex-wrap">
+                        {files.slice(0, 4).map((f, i) => (
+                          <span key={i} className="text-xs px-2 py-1 rounded-full" style={{ background: 'var(--accent)', color: '#fff' }}>
+                            {f.name.length > 15 ? f.name.slice(0, 12) + '...' : f.name}
+                          </span>
+                        ))}
+                        {files.length > 4 && (
+                          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'var(--surface-2)', color: 'var(--text-mut)' }}>
+                            +{files.length - 4} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="var(--text-mut)" className="mx-auto mb-2">
+                        <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                      </svg>
+                      <p className="text-sm" style={{ color: 'var(--text-2)' }}>
+                        {dragging ? '松开以上传' : '点击选择多张图片，或拖拽到此处'}
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-mut)' }}>支持 PNG、JPG、GIF、WebP</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 文件选择（视频/文档，单选） */}
+            {needsFile && !needsMultiFile && (
               <div>
                 <label className="block text-sm mb-2" style={{ color: 'var(--text-2)', fontFamily: 'var(--font-nunito-sans)' }}>
                   选择文件 <span style={{ color: 'var(--accent)' }}>*</span>
@@ -480,7 +616,7 @@ export default function UploadPage() {
             {/* 提交 */}
             <button
               type="submit"
-              disabled={uploading || !selectedEvent || !title || selectedTypes.size === 0 || (needsFile ? !file : false)}
+              disabled={uploading || !selectedEvent || !title || selectedTypes.size === 0 || (needsFile ? !file : false) || (currentType === 'image' ? files.length === 0 : false)}
               className="btn-accent w-full py-3.5 text-sm disabled:opacity-40"
             >
               {uploading ? '提交中...' : `提交审核${selectedTypes.size > 1 ? ` (${selectedTypes.size}条)` : ''}`}

@@ -9,6 +9,7 @@ import ContentTabs from '@/components/chigua/ContentTabs'
 import VideoPlayer from '@/components/chigua/VideoPlayer'
 import DocumentViewer from '@/components/chigua/DocumentViewer'
 import Timeline from '@/components/chigua/Timeline'
+import CommentSection from '@/components/chigua/CommentSection'
 import { supabase } from '@/lib/supabase'
 import type { VideoItem, DocumentItem, TimelineItem } from '@/lib/types'
 
@@ -278,6 +279,11 @@ export default function EventDetailPage() {
                   }
                 </div>
               </ContentTabs>
+            </div>
+
+            {/* Comments */}
+            <div className="fade-up">
+              <CommentSection eventId={id} />
             </div>
           </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import Navbar from '@/components/chigua/Navbar'
 import EventHero from '@/components/chigua/EventHero'
 import EventCard from '@/components/chigua/EventCard'
@@ -20,17 +20,26 @@ type Event = {
 
 const TAGS = ['全部', '娱乐', '科技', '财经', '社会', '国际']
 const SORTS = [
-  { key: 'heat',    label: '最热' },
-  { key: 'latest',  label: '最新' },
-  { key: 'synth',   label: '综合' },
+  { key: 'heat',   label: '最热' },
+  { key: 'latest', label: '最新' },
+  { key: 'synth',  label: '综合' },
 ]
+const PAGE_SIZE = 12
 
 export default function Home() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTag, setActiveTag] = useState('全部')
   const [activeSort, setActiveSort] = useState('heat')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageRef = useRef(1)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // 初始化加载
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -44,45 +53,106 @@ export default function Home() {
     return () => observer.disconnect()
   }, [events])
 
-  useEffect(() => {
-    async function fetchEvents() {
-      setLoading(true)
-      let query = supabase
-        .from('events')
-        .select('id, title, subtitle, cover_image, heat, tag, publish_date, read_time, summary')
-        .eq('status', 'published')
-
-      if (activeTag !== '全部') {
-        query = query.eq('tag', activeTag)
-      }
-
-      if (activeSort === 'heat') {
-        query = query.order('heat', { ascending: false })
-      } else if (activeSort === 'latest') {
-        query = query.order('publish_date', { ascending: false })
-      } else {
-        // 综合：按 heat 降序，publish_date 降序
-        query = query.order('heat', { ascending: false })
-      }
-
-      const { data, error } = await query
-      if (!error && data) {
-        // 综合排序：结合 heat 和时间
-        if (activeSort === 'synth') {
-          const sorted = [...data].sort((a, b) => {
-            const scoreA = a.heat * 0.7 + new Date(a.publish_date).getTime() * 0.0000001
-            const scoreB = b.heat * 0.7 + new Date(b.publish_date).getTime() * 0.0000001
-            return scoreB - scoreA
-          })
-          setEvents(sorted)
-        } else {
-          setEvents(data)
-        }
-      }
-      setLoading(false)
+  // 重置时重新拉数据
+  const fetchEvents = useCallback(async (reset = false) => {
+    if (reset) {
+      pageRef.current = 1
+      setEvents([])
+      setHasMore(true)
     }
-    fetchEvents()
+
+    const isInitial = reset || events.length === 0
+    if (isInitial) setLoading(true)
+    else setLoadingMore(true)
+
+    let query = supabase
+      .from('events')
+      .select('id, title, subtitle, cover_image, heat, tag, publish_date, read_time, summary')
+      .eq('status', 'published')
+      .limit(PAGE_SIZE)
+      .range((pageRef.current - 1) * PAGE_SIZE, pageRef.current * PAGE_SIZE - 1)
+
+    if (activeTag !== '全部') {
+      query = query.eq('tag', activeTag)
+    }
+
+    if (searchQuery.trim()) {
+      query = query.ilike('title', `%${searchQuery.trim()}%`)
+    }
+
+    if (activeSort === 'heat') {
+      query = query.order('heat', { ascending: false })
+    } else if (activeSort === 'latest') {
+      query = query.order('publish_date', { ascending: false })
+    } else {
+      query = query.order('heat', { ascending: false })
+    }
+
+    const { data, error } = await query
+
+    if (!error && data) {
+      const newEvents = pageRef.current === 1 ? data : [...events, ...data]
+
+      // 综合排序
+      if (activeSort === 'synth') {
+        const sorted = [...newEvents].sort((a, b) => {
+          const scoreA = a.heat * 0.7 + new Date(a.publish_date).getTime() * 0.0000001
+          const scoreB = b.heat * 0.7 + new Date(b.publish_date).getTime() * 0.0000001
+          return scoreB - scoreA
+        })
+        setEvents(sorted)
+      } else {
+        setEvents(newEvents)
+      }
+
+      if (data.length < PAGE_SIZE) {
+        setHasMore(false)
+      }
+    }
+
+    if (isInitial) setLoading(false)
+    else setLoadingMore(false)
+  }, [activeTag, activeSort, searchQuery, events.length])
+
+  // 初始加载
+  useEffect(() => {
+    fetchEvents(true)
   }, [activeTag, activeSort])
+
+  // 搜索防抖
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => {
+      setSearchQuery(searchInput)
+    }, 400)
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current)
+    }
+  }, [searchInput])
+
+  // 搜索变化时重置
+  useEffect(() => {
+    pageRef.current = 1
+    setHasMore(true)
+    fetchEvents(true)
+  }, [searchQuery])
+
+  // 无限滚动
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading && events.length > 0) {
+          pageRef.current += 1
+          fetchEvents(false)
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, loading, events.length, fetchEvents])
 
   const featured = events.reduce((a, b) => (a.heat > b.heat ? a : b), events[0])
   const rest = events.filter((e) => e.id !== featured?.id)
@@ -127,12 +197,28 @@ export default function Home() {
                 </svg>
                 <input
                   type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="搜索热点事件..."
                   className="flex-1 bg-transparent text-sm placeholder:text-text-mut outline-none"
                   style={{ fontFamily: 'var(--font-nunito-sans)', color: 'var(--text)' }}
                 />
-                <button className="btn-accent text-xs px-4 py-1.5">搜索</button>
+                {searchInput && (
+                  <button
+                    onClick={() => { setSearchInput(''); setSearchQuery('') }}
+                    className="text-text-mut hover:text-text transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    </svg>
+                  </button>
+                )}
               </div>
+              {searchQuery && (
+                <p className="text-xs mt-2" style={{ color: 'var(--text-mut)' }}>
+                  搜索：&ldquo;{searchQuery}&rdquo;
+                </p>
+              )}
             </div>
 
             {/* Featured Event */}
@@ -154,7 +240,7 @@ export default function Home() {
                 {TAGS.map((tag) => (
                   <button
                     key={tag}
-                    onClick={() => setActiveTag(tag)}
+                    onClick={() => { setActiveTag(tag); setSearchInput(''); setSearchQuery('') }}
                     className="px-3.5 py-1.5 rounded-full text-xs font-mono font-medium transition-all duration-200"
                     style={{
                       fontFamily: 'var(--font-jetbrains)',
@@ -185,11 +271,9 @@ export default function Home() {
                     {s.label}
                   </button>
                 ))}
-                {activeTag !== '全部' && (
-                  <span className="ml-auto text-xs font-mono" style={{ color: 'var(--text-mut)' }}>
-                    {loading ? '加载中...' : `${events.length} 个事件`}
-                  </span>
-                )}
+                <span className="ml-auto text-xs font-mono" style={{ color: 'var(--text-mut)' }}>
+                  {loading ? '加载中...' : `${events.length} 个事件`}
+                </span>
               </div>
             </div>
 
@@ -202,32 +286,47 @@ export default function Home() {
                 />
               </div>
             ) : rest.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {rest.map((event, i) => (
-                  <EventCard key={event.id} event={event} index={i} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {rest.map((event, i) => (
+                    <EventCard key={event.id} event={event} index={i} />
+                  ))}
+                </div>
+
+                {/* Infinite scroll sentinel */}
+                <div ref={sentinelRef} className="h-1" />
+
+                {/* Loading more indicator */}
+                {loadingMore && (
+                  <div className="flex items-center justify-center py-8 mt-4">
+                    <div
+                      className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+                      style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                    />
+                    <span className="ml-3 text-sm" style={{ color: 'var(--text-mut)' }}>加载更多...</span>
+                  </div>
+                )}
+
+                {!hasMore && events.length > 0 && (
+                  <p className="text-center text-sm font-mono py-8" style={{ color: 'var(--text-mut)' }}>
+                    — 已加载全部 {events.length} 个事件 —
+                  </p>
+                )}
+              </>
             ) : (
               <div className="text-center py-16">
-                <p className="text-sm font-mono" style={{ color: 'var(--text-mut)' }}>
-                  暂无{activeTag === '全部' ? '' : activeTag}相关事件
+                <p className="text-sm font-mono mb-3" style={{ color: 'var(--text-mut)' }}>
+                  未找到{searchQuery ? `搜索"${searchQuery}"` : activeTag === '全部' ? '' : activeTag}相关事件
                 </p>
-              </div>
-            )}
-
-            {/* Load More */}
-            {!loading && rest.length > 0 && (
-              <div className="flex justify-center mt-12 fade-up">
-                <button
-                  className="px-8 py-3 rounded-full text-sm font-semibold transition-all duration-200"
-                  style={{
-                    border: '1.5px solid var(--border)',
-                    color: 'var(--text-2)',
-                    fontFamily: 'var(--font-nunito-sans)',
-                  }}
-                >
-                  加载更多
-                </button>
+                {(searchQuery || activeTag !== '全部') && (
+                  <button
+                    onClick={() => { setActiveTag('全部'); setSearchInput(''); setSearchQuery('') }}
+                    className="text-sm px-5 py-2 rounded-full transition-all"
+                    style={{ color: 'var(--accent)', fontFamily: 'var(--font-nunito-sans)' }}
+                  >
+                    清除筛选
+                  </button>
+                )}
               </div>
             )}
           </div>
